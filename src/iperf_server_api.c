@@ -367,6 +367,8 @@ cleanup_server(struct iperf_test *test)
     SLIST_FOREACH(sp, &test->streams, streams) {
 	FD_CLR(sp->socket, &test->read_set);
 	FD_CLR(sp->socket, &test->write_set);
+    wolfSSL_CTX_free(sp->ssl_ctx);
+    wolfSSL_free(sp->ssl);
 	close(sp->socket);
     }
 

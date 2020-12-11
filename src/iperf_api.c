@@ -871,6 +871,7 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
 {
     static struct option longopts[] =
     {
+        {"ssl", no_argument, NULL, OPT_SSL},
         {"port", required_argument, NULL, 'p'},
         {"format", required_argument, NULL, 'f'},
         {"interval", required_argument, NULL, 'i'},
@@ -963,6 +964,9 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
 
     while ((flag = getopt_long(argc, argv, "p:f:i:D1VJvsc:ub:t:n:k:l:P:Rw:B:M:N46S:L:ZO:F:A:T:C:dI:hX:", longopts, NULL)) != -1) {
         switch (flag) {
+            case OPT_SSL:
+                test->use_ssl = 1;
+                wolfSSL_Init();
             case 'p':
 		portno = atoi(optarg);
 		if (portno < 1 || portno > 65535) {
@@ -2744,6 +2748,10 @@ iperf_free_test(struct iperf_test *test)
     // test->streams = NULL;
     test->stats_callback = NULL;
     test->reporter_callback = NULL;
+
+    if (test->use_ssl)
+        wolfSSL_Cleanup();
+
     free(test);
 }
 
@@ -3861,6 +3869,8 @@ iperf_new_stream(struct iperf_test *test, int s, int sender)
     struct iperf_stream *sp;
     int ret = 0;
 
+    
+
     char template[1024];
     if (test->tmp_template) {
         snprintf(template, sizeof(template) / sizeof(char), "%s", test->tmp_template);
@@ -3887,6 +3897,7 @@ iperf_new_stream(struct iperf_test *test, int s, int sender)
 
     memset(sp, 0, sizeof(struct iperf_stream));
 
+    sp->ssl_flg = test->use_ssl;
     sp->sender = sender;
     sp->test = test;
     sp->settings = test->settings;

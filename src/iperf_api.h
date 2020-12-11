@@ -80,6 +80,7 @@ typedef uint64_t iperf_size_t;
 #define OPT_SERVER_BITRATE_LIMIT 21
 #define OPT_TIMESTAMPS 22
 #define OPT_SERVER_SKEW_THRESHOLD 23
+#define OPT_SSL 24
 
 /* states */
 #define TEST_START 1

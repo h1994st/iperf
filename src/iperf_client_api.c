@@ -434,6 +434,8 @@ iperf_client_end(struct iperf_test *test)
 
     /* Close all stream sockets */
     SLIST_FOREACH(sp, &test->streams, streams) {
+        wolfSSL_CTX_free(sp->ssl_ctx);
+        wolfSSL_free(sp->ssl);
         close(sp->socket);
     }
 

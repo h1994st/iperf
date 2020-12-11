@@ -68,6 +68,8 @@
 #include <openssl/evp.h>
 #endif // HAVE_SSL
 
+#include "wolfssl/ssl.h"
+
 #if !defined(__IPERF_API_H)
 typedef uint64_t iperf_size_t;
 #endif // __IPERF_API_H
@@ -215,6 +217,10 @@ struct iperf_stream
     SLIST_ENTRY(iperf_stream) streams;
 
     void     *data;
+
+    int      ssl_flg;
+    WOLFSSL_CTX* ssl_ctx;
+    WOLFSSL*     ssl;
 };
 
 struct protocol {
@@ -368,6 +374,7 @@ struct iperf_test
     /* Server output (use on server side only) */
     TAILQ_HEAD(iperf_textlisthead, iperf_textline) server_output_list;
 
+    int use_ssl;
 };
 
 /* default settings */

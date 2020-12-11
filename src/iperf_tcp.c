@@ -24,6 +24,7 @@
  * This code is distributed under a BSD style license, see the LICENSE
  * file for complete information.
  */
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +38,8 @@
 #include <sys/time.h>
 #include <sys/select.h>
 #include <limits.h>
+
+#include <wolfssl/ssl.h>
 
 #include "iperf.h"
 #include "iperf_api.h"
@@ -56,6 +59,7 @@ int
 iperf_tcp_recv(struct iperf_stream *sp)
 {
     int r;
+
 
     r = Nread(sp->socket, sp->buffer, sp->settings->blksize, Ptcp);
 
@@ -84,6 +88,11 @@ int
 iperf_tcp_send(struct iperf_stream *sp)
 {
     int r;
+
+    if (sp->ssl_flg && !sp->ssl) {
+        assert(!sp->ssl_ctx);
+        // sp->ssl_ctx = init_ssl_ctx();
+    }
 
     if (sp->test->zerocopy)
 	r = Nsendfile(sp->buffer_fd, sp->socket, sp->buffer, sp->settings->blksize);
@@ -636,3 +645,25 @@ iperf_tcp_connect(struct iperf_test *test)
 
     return s;
 }
+
+
+// WOLFSSL_CTX* server() {
+//     WOLFSSL_CTX* ctx = wolfSSL_CTX_new(wolfTLSv1_2_method());
+//     if (!ctx) {
+//         perror("Unable to create wolfSSL context");
+//         wolfSSL_ERR_print_errors_fp(stderr, EXIT_FAILURE);
+//         exit(EXIT_FAILURE);
+//     }
+
+//     if (SSL_CTX_use_certificate_ASN1(ctx, cert_der_len, cert_der) <= 0) {
+//         ERR_print_errors_fp(stderr);
+//         exit(EXIT_FAILURE);
+//     }
+
+//     if (SSL_CTX_use_RSAPrivateKey_ASN1(ctx, key_der, key_der_len) <= 0 ) {
+//         ERR_print_errors_fp(stderr);
+//         exit(EXIT_FAILURE);
+//     }
+
+//     return ctx;
+// }
