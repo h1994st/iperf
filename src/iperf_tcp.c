@@ -51,6 +51,9 @@
 #include "flowlabel.h"
 #endif /* HAVE_FLOWLABEL */
 
+char CERT_FILE[] = "";
+char KEY_FILE[] = "";
+
 /* iperf_tcp_recv
  *
  * receives the data for TCP
@@ -60,8 +63,21 @@ iperf_tcp_recv(struct iperf_stream *sp)
 {
     int r;
 
-
-    r = Nread(sp->socket, sp->buffer, sp->settings->blksize, Ptcp);
+    if (sp->ssl_flg) {
+        if (!sp->ssl) {
+            assert(!sp->ssl_ctx);
+            sp->ssl_ctx = receiver_ssl_ctx_init();
+            sp->ssl = wolfSSL_new(sp->ssl_ctx);
+            wolfSSL_set_fd(sp->ssl, sp->socket);
+            if (wolfSSL_accept(sp->ssl) <= 0) {
+                wolfSSL_ERR_print_errors_fp(stderr, EXIT_FAILURE);
+                exit(EXIT_FAILURE);
+            }
+        }
+        r = ssl_Nread(sp->ssl, sp->buffer, sp->settings->blksize, Ptcp);
+    } else {
+        r = Nread(sp->socket, sp->buffer, sp->settings->blksize, Ptcp);
+    }
 
     if (r < 0)
         return r;
@@ -89,15 +105,24 @@ iperf_tcp_send(struct iperf_stream *sp)
 {
     int r;
 
-    if (sp->ssl_flg && !sp->ssl) {
-        assert(!sp->ssl_ctx);
-        // sp->ssl_ctx = init_ssl_ctx();
-    }
-
     if (sp->test->zerocopy)
-	r = Nsendfile(sp->buffer_fd, sp->socket, sp->buffer, sp->settings->blksize);
-    else
-	r = Nwrite(sp->socket, sp->buffer, sp->settings->blksize, Ptcp);
+	    r = Nsendfile(sp->buffer_fd, sp->socket, sp->buffer, sp->settings->blksize);
+
+    if (sp->ssl_flg) {
+        if (!sp->ssl) {
+            assert(!sp->ssl_ctx);
+            sp->ssl_ctx = sender_ssl_ctx_init();
+            sp->ssl = wolfSSL_new(sp->ssl_ctx);
+            wolfSSL_set_fd(sp->ssl, sp->socket);
+            if (wolfSSL_connect(sp->ssl) == -1) {
+                wolfSSL_ERR_print_errors_fp(stderr, EXIT_FAILURE);
+                exit(1);
+            }
+        }
+        r = ssl_Nwrite(sp->ssl, sp->buffer, sp->settings->blksize, Ptcp);
+    } else {
+    	r = Nwrite(sp->socket, sp->buffer, sp->settings->blksize, Ptcp);
+    }
 
     if (r < 0)
         return r;
@@ -647,23 +672,34 @@ iperf_tcp_connect(struct iperf_test *test)
 }
 
 
-// WOLFSSL_CTX* server() {
-//     WOLFSSL_CTX* ctx = wolfSSL_CTX_new(wolfTLSv1_2_method());
-//     if (!ctx) {
-//         perror("Unable to create wolfSSL context");
-//         wolfSSL_ERR_print_errors_fp(stderr, EXIT_FAILURE);
-//         exit(EXIT_FAILURE);
-//     }
+WOLFSSL_CTX* sender_ssl_ctx_init() {
+    WOLFSSL_CTX* ctx = SSL_CTX_new(TLS_client_method(wolfTLSv1_2_client_method()));
+    if (ctx == NULL) {
+        wolfSSL_ERR_print_errors_fp(stderr, EXIT_FAILURE);
+        exit(EXIT_FAILURE); 
+    }
+    return ctx;
+}
 
-//     if (SSL_CTX_use_certificate_ASN1(ctx, cert_der_len, cert_der) <= 0) {
-//         ERR_print_errors_fp(stderr);
-//         exit(EXIT_FAILURE);
-//     }
 
-//     if (SSL_CTX_use_RSAPrivateKey_ASN1(ctx, key_der, key_der_len) <= 0 ) {
-//         ERR_print_errors_fp(stderr);
-//         exit(EXIT_FAILURE);
-//     }
+WOLFSSL_CTX* receiver_ssl_ctx_init() {
+    WOLFSSL_CTX* ctx = wolfSSL_CTX_new(wolfTLSv1_2_server_method());
 
-//     return ctx;
-// }
+    if (!ctx) {
+        perror("Unable to create wolfSSL context");
+        wolfSSL_ERR_print_errors_fp(stderr, EXIT_FAILURE);
+        exit(EXIT_FAILURE);
+    }
+
+    if (wolfSSL_CTX_use_certificate_file(ctx, CERT_FILE, SSL_FILETYPE_PEM) <= 0) {
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    if (wolfSSL_CTX_use_PrivateKey_file(ctx, KEY_FILE, SSL_FILETYPE_PEM) <= 0) {
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    return ctx;
+}

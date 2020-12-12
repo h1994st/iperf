@@ -967,6 +967,7 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
             case OPT_SSL:
                 test->use_ssl = 1;
                 wolfSSL_Init();
+                break;
             case 'p':
 		portno = atoi(optarg);
 		if (portno < 1 || portno > 65535) {
@@ -1533,6 +1534,7 @@ iperf_set_send_state(struct iperf_test *test, signed char state)
 {
     test->state = state;
     if (Nwrite(test->ctrl_sck, (char*) &state, sizeof(state), Ptcp) < 0) {
+        printf("here\n");
 	i_errno = IESENDMESSAGE;
 	return -1;
     }

@@ -338,6 +338,28 @@ Nread(int fd, char *buf, size_t count, int prot)
     return count - nleft;
 }
 
+int
+ssl_Nread(WOLFSSL* ssl, char *buf, size_t count, int prot)
+{
+    register ssize_t r;
+    register size_t nleft = count;
+
+    while (nleft > 0) {
+        r = wolfSSL_read(ssl, buf, nleft);
+        if (r < 0) {
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+                break;
+            else
+                return NET_HARDERROR;
+        } else if (r == 0)
+            break;
+
+        nleft -= r;
+        buf += r;
+    }
+    return count - nleft;
+}
+
 
 /*
  *                      N W R I T E
@@ -351,6 +373,37 @@ Nwrite(int fd, const char *buf, size_t count, int prot)
 
     while (nleft > 0) {
 	r = write(fd, buf, nleft);
+	if (r < 0) {
+	    switch (errno) {
+		case EINTR:
+		case EAGAIN:
+#if (EAGAIN != EWOULDBLOCK)
+		case EWOULDBLOCK:
+#endif
+		return count - nleft;
+
+		case ENOBUFS:
+		return NET_SOFTERROR;
+
+		default:
+		return NET_HARDERROR;
+	    }
+	} else if (r == 0)
+	    return NET_SOFTERROR;
+	nleft -= r;
+	buf += r;
+    }
+    return count;
+}
+
+int
+ssl_Nwrite(WOLFSSL* ssl, const char *buf, size_t count, int prot)
+{
+    register ssize_t r;
+    register size_t nleft = count;
+
+    while (nleft > 0) {
+	r = wolfSSL_write(ssl, buf, nleft);
 	if (r < 0) {
 	    switch (errno) {
 		case EINTR:
