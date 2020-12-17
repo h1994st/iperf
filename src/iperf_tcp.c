@@ -55,6 +55,7 @@
 #define CERT_FILE_SERVER    "/home/iperftester/wolfssl/certs/server-cert.pem"
 #define KEY_FILE            "/home/iperftester/wolfssl/certs/server-key.pem"
 #define CERT_FILE_CLIENT    "/home/iperftester/wolfssl/certs/ca-cert.pem"
+#define SUITES              "DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256"
 
 /* iperf_tcp_recv
  *
@@ -75,7 +76,10 @@ iperf_tcp_recv(struct iperf_stream *sp)
                 if (wolfSSL_want_read(sp->ssl)) {
                     sleep(1);
                 } else {
-                    printf("wolfSSL_accept failure\n");
+                    printf("wolfSSL_accept failure: ");
+                    char buf[80];
+                    wolfSSL_ERR_error_string(wolfSSL_get_error(sp->ssl, r), buf);
+                    printf("%s\n", buf);
                     exit(EXIT_FAILURE);
                 }
             }
@@ -125,7 +129,10 @@ iperf_tcp_send(struct iperf_stream *sp)
                 if (wolfSSL_want_read(sp->ssl)) {
                     sleep(1);
                 } else {
-                    printf("wolfSSL_connect failure\n");
+                    printf("wolfSSL_connect failure: ");
+                    char buf[80];
+                    wolfSSL_ERR_error_string(wolfSSL_get_error(sp->ssl, r), buf);
+                    printf("%s\n", buf);
                     exit(EXIT_FAILURE);
                 }
             }
@@ -684,10 +691,15 @@ iperf_tcp_connect(struct iperf_test *test)
 
 
 WOLFSSL_CTX* sender_ssl_ctx_init() {
-    WOLFSSL_CTX* ctx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
+    WOLFSSL_CTX* ctx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());    
     if (ctx == NULL) {
         perror("wolfSSL_CTX_new failure\n");
         exit(EXIT_FAILURE); 
+    }
+
+    if (wolfSSL_CTX_set_cipher_list(ctx, SUITES) != SSL_SUCCESS) {
+        perror("wolfSSL_CTX_set_cipher_list failure\n");
+        exit(EXIT_FAILURE);
     }
 
     if (wolfSSL_CTX_load_verify_locations(ctx, CERT_FILE_CLIENT, NULL) != SSL_SUCCESS) {
@@ -700,9 +712,13 @@ WOLFSSL_CTX* sender_ssl_ctx_init() {
 
 WOLFSSL_CTX* receiver_ssl_ctx_init() {
     WOLFSSL_CTX* ctx = wolfSSL_CTX_new(wolfTLSv1_2_server_method());
-
     if (!ctx) {
         perror("Unable to create wolfSSL context");
+        exit(EXIT_FAILURE);
+    }
+
+    if (wolfSSL_CTX_set_cipher_list(ctx, SUITES) != SSL_SUCCESS) {
+        perror("wolfSSL_CTX_set_cipher_list failure\n");
         exit(EXIT_FAILURE);
     }
 
