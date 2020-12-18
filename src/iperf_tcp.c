@@ -39,8 +39,8 @@
 #include <sys/select.h>
 #include <limits.h>
 
-#include <wolfssl/ssl.h>
 #include <wolfssl/options.h>
+#include <wolfssl/ssl.h>
 
 #include "iperf.h"
 #include "iperf_api.h"
@@ -67,7 +67,6 @@ iperf_tcp_recv(struct iperf_stream *sp)
     int r;
     if (sp->ssl_flg) {
         if (!sp->ssl) {
-            int val;
             assert(!sp->ssl_ctx);
             sp->ssl_ctx = receiver_ssl_ctx_init();
             sp->ssl = wolfSSL_new(sp->ssl_ctx);
@@ -711,6 +710,7 @@ WOLFSSL_CTX* sender_ssl_ctx_init() {
 
 
 WOLFSSL_CTX* receiver_ssl_ctx_init() {
+    printf("initing tcp\n");
     WOLFSSL_CTX* ctx = wolfSSL_CTX_new(wolfTLSv1_2_server_method());
     if (!ctx) {
         perror("Unable to create wolfSSL context");

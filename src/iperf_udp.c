@@ -40,6 +40,9 @@
 #include <sys/time.h>
 #include <sys/select.h>
 
+#include <wolfssl/options.h>
+#include <wolfssl/ssl.h>
+
 #include "iperf.h"
 #include "iperf_api.h"
 #include "iperf_util.h"
@@ -61,6 +64,11 @@
 # endif
 #endif
 
+#define CERT_FILE_SERVER    "/home/iperftester/wolfssl/certs/server-cert.pem"
+#define KEY_FILE            "/home/iperftester/wolfssl/certs/server-key.pem"
+#define CERT_FILE_CLIENT    "/home/iperftester/wolfssl/certs/ca-cert.pem"
+#define SUITES              "DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256"
+
 /* iperf_udp_recv
  *
  * receives the data for UDP
@@ -76,7 +84,27 @@ iperf_udp_recv(struct iperf_stream *sp)
     double    transit = 0, d = 0;
     struct iperf_time sent_time, arrival_time, temp_time;
 
-    r = Nread(sp->socket, sp->buffer, size, Pudp);
+    if (sp->ssl_flg) {
+        if (!sp->ssl) {
+            assert(!sp->ssl_ctx);
+            sp->ssl_ctx = udp_receiver_ssl_ctx_init();
+            sp->ssl = wolfSSL_new(sp->ssl_ctx);
+            wolfSSL_set_fd(sp->ssl, sp->socket);
+            wolfSSL_dtls_set_using_nonblock(sp->ssl, 1);
+            if ((r = wolfSSL_accept(sp->ssl)) != SSL_SUCCESS) {
+                if (!wolfSSL_want_read(sp->ssl)) {
+                    printf("wolfSSL_accept failure: ");
+                    char buf[80];
+                    wolfSSL_ERR_error_string(wolfSSL_get_error(sp->ssl, r), buf);
+                    printf("%s\n", buf);
+                    exit(EXIT_FAILURE);
+                }
+            }
+        }
+        r = ssl_Nread(sp->ssl, sp->buffer, size, Pudp);
+    } else {
+        r = Nread(sp->socket, sp->buffer, size, Pudp);
+    }
 
     /*
      * If we got an error in the read, or if we didn't read anything
@@ -248,7 +276,28 @@ iperf_udp_send(struct iperf_stream *sp)
 	
     }
 
-    r = Nwrite(sp->socket, sp->buffer, size, Pudp);
+    if (sp->ssl_flg) {
+        if (!sp->ssl) {
+            assert(!sp->ssl_ctx);
+            sp->ssl_ctx = udp_sender_ssl_ctx_init();
+            sp->ssl = wolfSSL_new(sp->ssl_ctx);
+            wolfSSL_dtls_set_peer(sp->ssl, &sp->remote_addr, sizeof(struct sockaddr_storage));
+            wolfSSL_set_fd(sp->ssl, sp->socket);
+            wolfSSL_dtls_set_using_nonblock(sp->ssl, 1);
+            while (wolfSSL_connect(sp->ssl) != WOLFSSL_SUCCESS) {
+                if (!wolfSSL_want_read(sp->ssl) || !wolfSSL_want_write(sp->ssl)) {
+                    printf("wolfSSL_connect failure: ");
+                    char buf[80];
+                    wolfSSL_ERR_error_string(wolfSSL_get_error(sp->ssl, r), buf);
+                    printf("%s\n", buf);
+                    exit(EXIT_FAILURE);
+                }
+            }
+        }
+        r = ssl_Nwrite(sp->ssl, sp->buffer, size, Pudp);
+    } else {
+    	r = Nwrite(sp->socket, sp->buffer, size, Pudp);
+    }
 
     if (r < 0)
 	return r;
@@ -587,4 +636,50 @@ int
 iperf_udp_init(struct iperf_test *test)
 {
     return 0;
+}
+
+
+WOLFSSL_CTX* udp_sender_ssl_ctx_init() {
+	WOLFSSL_METHOD* method = wolfDTLSv1_2_client_method();
+    WOLFSSL_CTX* ctx = wolfSSL_CTX_new(method);    
+    if (ctx == NULL) {
+        perror("wolfSSL_CTX_new failure\n");
+        exit(EXIT_FAILURE); 
+    }
+
+    if (wolfSSL_CTX_set_cipher_list(ctx, SUITES) != SSL_SUCCESS) {
+        perror("wolfSSL_CTX_set_cipher_list failure\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (wolfSSL_CTX_load_verify_locations(ctx, CERT_FILE_CLIENT, NULL) != SSL_SUCCESS) {
+        perror("wolfSSL wolfSSL_CTX_load_verify_locations failure\n");
+        exit(EXIT_FAILURE);
+    }
+    return ctx;
+}
+
+WOLFSSL_CTX* udp_receiver_ssl_ctx_init() {
+	WOLFSSL_CTX* ctx = wolfSSL_CTX_new(wolfDTLSv1_2_server_method());
+    if (!ctx) {
+        perror("Unable to create wolfSSL context");
+        exit(EXIT_FAILURE);
+    }
+
+    if (wolfSSL_CTX_set_cipher_list(ctx, SUITES) != SSL_SUCCESS) {
+        perror("wolfSSL_CTX_set_cipher_list failure\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (wolfSSL_CTX_use_certificate_file(ctx, CERT_FILE_SERVER, SSL_FILETYPE_PEM) != SSL_SUCCESS) {
+        perror("wolfSSL_CTX_use_certificate_file failure\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (wolfSSL_CTX_use_PrivateKey_file(ctx, KEY_FILE, SSL_FILETYPE_PEM) != SSL_SUCCESS) {
+        perror("wolfSSL_CTX_use_PrivateKey_file failure\n");
+        exit(EXIT_FAILURE);
+    }
+
+    return ctx;
 }

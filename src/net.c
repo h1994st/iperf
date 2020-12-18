@@ -346,11 +346,16 @@ ssl_Nread(WOLFSSL* ssl, char *buf, size_t count, int prot)
 
     while (nleft > 0) {
         r = wolfSSL_read(ssl, buf, nleft);
+
         if (r < 0) {
             if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
                 break;
-            else
+            else {
+                char buf[80];
+                wolfSSL_ERR_error_string(wolfSSL_get_error(ssl, r), buf);
+                printf("%s\n", buf);
                 return NET_HARDERROR;
+            }
         } else if (r == 0)
             break;
 
@@ -404,6 +409,7 @@ ssl_Nwrite(WOLFSSL* ssl, const char *buf, size_t count, int prot)
 
     while (nleft > 0) {
 	r = wolfSSL_write(ssl, buf, nleft);
+
 	if (r < 0) {
 	    switch (errno) {
 		case EINTR:
@@ -416,8 +422,12 @@ ssl_Nwrite(WOLFSSL* ssl, const char *buf, size_t count, int prot)
 		case ENOBUFS:
 		return NET_SOFTERROR;
 
-		default:
-		return NET_HARDERROR;
+		default: {
+        char buf[80];
+        wolfSSL_ERR_error_string(wolfSSL_get_error(ssl, r), buf);
+        printf("%s\n", buf);
+        return NET_HARDERROR;
+        }
 	    }
 	} else if (r == 0)
 	    return NET_SOFTERROR;
