@@ -871,7 +871,12 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
 {
     static struct option longopts[] =
     {
-        {"ssl", no_argument, NULL, OPT_SSL},
+        {"ssl-suites-file", required_argument, NULL, OPT_SSL_SUITES},
+        {"ssl-dtls-version", required_argument, NULL, OPT_SSL_DTLS},
+        {"ssl-tls-version", required_argument, NULL, OPT_SSL_TLS},
+        {"ssl-server-cert", required_argument, NULL, OPT_SSL_SERVER_CERT},
+        {"ssl-server-key", required_argument, NULL, OPT_SSL_SERVER_KEY},
+        {"ssl-client-cert", required_argument, NULL, OPT_SSL_CLIENT_CERT},
         {"port", required_argument, NULL, 'p'},
         {"format", required_argument, NULL, 'f'},
         {"interval", required_argument, NULL, 'i'},
@@ -962,11 +967,35 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
     char *client_username = NULL, *client_rsa_public_key = NULL, *server_rsa_private_key = NULL;
 #endif /* HAVE_SSL */
 
+    /* TLS helper vars */
+    char* suites_f = NULL;
+    char* dtls_v = NULL;
+    char* tls_v = NULL;
+    char* cert_f = NULL;
+    char* key_f = NULL;
+
     while ((flag = getopt_long(argc, argv, "p:f:i:D1VJvsc:ub:t:n:k:l:P:Rw:B:M:N46S:L:ZO:F:A:T:C:dI:hX:", longopts, NULL)) != -1) {
         switch (flag) {
-            case OPT_SSL:
+            case OPT_SSL_SUITES:
                 test->use_ssl = 1;
-                wolfSSL_Init();
+                suites_f = strdup(optarg);
+                break;
+            case OPT_SSL_DTLS:
+                test->use_ssl = 1;
+                dtls_v = strdup(optarg);
+                break;
+            case OPT_SSL_TLS:
+                test->use_ssl = 1;
+                tls_v = strdup(optarg);
+                break;
+            case OPT_SSL_SERVER_CERT:
+            case OPT_SSL_CLIENT_CERT:
+                test->use_ssl = 1;
+                cert_f = strdup(optarg);
+                break;
+            case OPT_SSL_SERVER_KEY:
+                test->use_ssl = 1;
+                key_f = strdup(optarg);
                 break;
             case 'p':
 		portno = atoi(optarg);
@@ -1510,6 +1539,52 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
     }
     if (test->json_output && test->debug) {
         warning("Debug output (-d) may interfere with JSON output (-J)");
+    }
+
+    /* TLS argument setting/checking */
+    if (test->use_ssl) {
+        wolfSSL_Init();
+
+        // load user-specified cipher suites
+        if (suites_f != NULL) {
+            FILE* fd = NULL;
+            if ((fd = fopen(suites_f, "r")) == NULL) {
+                perror("Failure opening provided cipher suites file\n");
+                exit(EXIT_FAILURE);
+            }
+
+            // get file size
+            fseek(fd, 0, SEEK_END);
+            size_t sz = ftell(fd); 
+            rewind(fd); 
+
+            // allocate memory and copy into file
+            if ((test->suites = malloc((sz * sizeof(char)) + 1)) == NULL) {
+                perror("Failure to allocate memory for cipher suites\n");
+                exit(EXIT_FAILURE);
+            }
+            memset(test->suites, 0, sz * sizeof(char) + 1);
+            if ((fread(test->suites, sizeof(char), sz, fd)) != sz) {
+                perror("Failure to load cipher suites file\n");
+                exit(EXIT_FAILURE);
+            }
+            free(suites_f);
+        }
+
+        // set certificate and private key file paths
+        if (cert_f == NULL) {
+            perror("Must specify certificate file when using TLS/DTLS\n");
+            exit(EXIT_FAILURE);
+        }
+        if (test->mode == RECEIVER && key_f == NULL) {
+            perror("Must specify private key file when using TLS/DTLS as the receiver\n");
+            exit(EXIT_FAILURE);
+        }
+        test->cert_f = cert_f;
+        test->key_f = key_f;
+
+        // set tls/dtls version
+        test->tls_v = tls_v == NULL ? dtls_v : tls_v;
     }
 
     return 0;
@@ -2750,8 +2825,13 @@ iperf_free_test(struct iperf_test *test)
     test->stats_callback = NULL;
     test->reporter_callback = NULL;
 
-    if (test->use_ssl)
+    if (test->use_ssl) {
         wolfSSL_Cleanup();
+        free(test->cert_f);
+        if (test->suites != NULL) free(test->suites);
+        if (test->key_f != NULL) free(test->key_f);
+        if (test->tls_v != NULL) free(test->tls_v);
+    }
 
     free(test);
 }
@@ -3898,7 +3978,6 @@ iperf_new_stream(struct iperf_test *test, int s, int sender)
 
     memset(sp, 0, sizeof(struct iperf_stream));
 
-    sp->ssl_flg = test->use_ssl;
     sp->sender = sender;
     sp->test = test;
     sp->settings = test->settings;

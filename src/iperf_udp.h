@@ -60,7 +60,7 @@ int iperf_udp_connect(struct iperf_test *);
 
 int iperf_udp_init(struct iperf_test *);
 
-WOLFSSL_CTX* udp_sender_ssl_ctx_init();
-WOLFSSL_CTX* udp_receiver_ssl_ctx_init();
+WOLFSSL_CTX* udp_sender_ssl_ctx_init(struct iperf_stream *sp);
+WOLFSSL_CTX* udp_receiver_ssl_ctx_init(struct iperf_stream *sp);
 
 #endif

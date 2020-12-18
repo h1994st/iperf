@@ -59,7 +59,7 @@ int iperf_tcp_listen(struct iperf_test *);
 
 int iperf_tcp_connect(struct iperf_test *);
 
-WOLFSSL_CTX* sender_ssl_ctx_init();
-WOLFSSL_CTX* receiver_ssl_ctx_init();
+WOLFSSL_CTX* sender_ssl_ctx_init(struct iperf_stream *sp);
+WOLFSSL_CTX* receiver_ssl_ctx_init(struct iperf_stream *sp);
 
 #endif

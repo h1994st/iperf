@@ -218,7 +218,6 @@ struct iperf_stream
 
     void     *data;
 
-    int      ssl_flg;
     WOLFSSL_CTX* ssl_ctx;
     WOLFSSL*     ssl;
 };
@@ -375,6 +374,10 @@ struct iperf_test
     TAILQ_HEAD(iperf_textlisthead, iperf_textline) server_output_list;
 
     int use_ssl;
+    char* suites;
+    char* cert_f;
+    char* key_f;
+    char* tls_v;
 };
 
 /* default settings */
